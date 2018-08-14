@@ -1,0 +1,388 @@
+#! /bin/bash
+
+# sync_macs_from_ldap - Synchronize NAC end-system groups with LDAP
+#
+# Version 1.0.3
+
+# Copyright (C) 2017 by Erik Auerswald <auerswald@fg-networking.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+# The script sync_macs_from_ldap reads MAC addresses, end-system group name,
+# and description from an LDAP server and adds / removes MAC addresses
+# from / to Extreme Management Center resp. Extreme Access Control
+# (formerly known as NAC).
+#
+# Only MAC Addresses added via this script can be removed by this script.
+#
+# The end-system groups need to be manually created in EMC / EAC, they are
+# not synched via this script.
+#
+# Note that this script updates the EMC data base. Either a manual "enforce" or
+# the end-system group option "Automatically update Extreme Access Control
+# engines" is needed to propagate the changes to the EAC engines (NAC servers)
+#
+# The LDAP server is queried using "ldapsearch."
+# EMC / EAC is accessed using Extreme Network's NAC Request Tool (NRT).
+# Output is sent to Syslog (additionally to STDERR if started with a TTY).
+
+# uncomment the following line for debugging
+#tty -s && set -x
+
+## user configuration section
+LDAP_URI='ldap://192.0.2.47:7389'
+BACKUP_LDAP_URI='ldap://192.0.2.48:7389'
+LDAP_BIND_USER='uid=username,cn=users,dc=example,dc=com'
+LDAP_PASS='LDAP_pass'
+LDAP_BASE='cn=computers,dc=example,dc=com'
+LDAP_FILTER='(&(macAddress=*)(univentionNetworkLink=*))'
+LDAP_ATTR_MAC='macAddress'
+LDAP_ATTR_ESG='univentionNetworkLink'
+LDAP_ATTR_DESC='description'
+EMC_IP='192.0.2.46'
+NRT_USER='EMC_admin'
+NRT_PASS='EMC_pass'
+SYSLOG_SERVERS='192.0.2.46:514 192.0.2.49:514'
+SYSLOG_FACILITY='local0'
+
+## internal configuration section - handle with care
+# external executables and their options
+NRTDIR='/usr/local/Extreme_Networks/NacRequestTool'
+NRT='NacRequest.sh'
+NRTTO='10000'
+NRTADD='-addAndReauth -oper esoverride -endsystem -csv'
+NRTDEL='-delAndReauth -oper esoverride -endsystem -csv'
+NRTADDOUT='NRT_add_output.txt'
+NRTDELOUT='NRT_del_output.txt'
+LDAPSEARCH='/usr/local/bin/ldapsearch'
+LDAPOPTS='-LLL'
+LDAP_ATTRS="${LDAP_ATTR_MAC} ${LDAP_ATTR_ESG} ${LDAP_ATTR_DESC}"
+DIFF='/usr/bin/diff'
+GAWK='/usr/bin/gawk'
+
+# script internals
+PROG="$(basename $0)"
+LOGGER='/usr/bin/logger'
+LOGOPTS="-t ${PROG}"
+LOGSEV='info'
+VARDIR="/var/lib/${PROG}"
+LDAPENTRIESRAW='LDAP_entries_raw.ldif'
+LDAPENTRIES='LDAP_entries.ldif'
+MACCUR='LDAP_mac_addresses.csv'
+MACPREV='LDAP_mac_addresses_previous.csv'
+MACDIFF='LDAP_mac_addresses_difference.diff'
+MACADD='LDAP_mac_addresses_add.csv'
+MACREM='LDAP_mac_addresses_remove.csv'
+CSVERRORS='CSV_generation_errors.txt'
+LDAPERRORS='LDAP_search_errors.txt'
+
+# error out if an unset variable is dereferenced
+set -u
+
+# function to log a message to all Syslog servers in SYSLOG_SERVERS
+# set severity (LOGSEV) before calling this function
+log_msg() {
+  # log to Syslog servers
+  for LOGSRV in ${SYSLOG_SERVERS}; do
+    SRV="${LOGSRV%%:*}"
+    PORT="${LOGSRV##*:}"
+    test "$(expr index "${LOGSRV}" :)" = '0' && PORT=514
+    test -z "${PORT}" && PORT=514
+    "${LOGGER}" ${LOGOPTS} -n "${SRV}" -p "${SYSLOG_FACILITY}.${LOGSEV}" \
+    -P "${PORT}" "$*"
+  done
+  # log to STDERR if run interactively
+  tty -s && echo "$*" 1>&2
+}
+
+# function to send a file to all Syslog servers in SYSLOG_SERVERS
+# set severity (LOGSEV) before calling this function
+log_file() {
+  # log to Syslog servers
+  for LOGSRV in ${SYSLOG_SERVERS}; do
+    SRV="${LOGSRV%%:*}"
+    PORT="${LOGSRV##*:}"
+    test "$(expr index "${LOGSRV}" :)" = '0' && PORT=514
+    test -z "${PORT}" && PORT=514
+    "${LOGGER}" ${LOGOPTS} -n "${SRV}" -p "${SYSLOG_FACILITY}.${LOGSEV}" \
+    -P "${PORT}" < "$1"
+  done
+  # log to STDERR if run interactively
+  tty -s && cat "$*" 1>&2
+}
+
+# function to query LDAP server given as argument
+query_ldap_uri() {
+"${LDAPSEARCH}" ${LDAPOPTS} -H "$1" -D "${LDAP_BIND_USER}" \
+                -w "${LDAP_PASS}" -b "${LDAP_BASE}" "${LDAP_FILTER}" \
+                ${LDAP_ATTRS} > "${VARDIR}/${LDAPENTRIESRAW}" \
+                             2> "${VARDIR}/${LDAPERRORS}"
+}
+
+# function to assemble lines returned from LDAP search
+assemble_lines() {
+  sed ':RN;$!N;s/\n[[:space:]]\(.\)/\1/;tRN;P;D'
+}
+
+# work around buggy logger in Debian, Ubuntu, ...
+"${LOGGER}" --version | fgrep 2.20.1 -q && LOGOPTS="${LOGOPTS} -u BUGGY_LOGGER"
+
+### beginning of main functionality
+LOGSEV='info'
+log_msg 'Start'
+
+# check for needed executables
+ALL_EXE_FOUND=1
+LOGSEV='debug'
+log_msg 'checking availability of required executables'
+for EXE in "${DIFF}" "${NRTDIR}/${NRT}" "${LDAPSEARCH}" "${GAWK}" \
+           "$(which sort)" "$(which sed)"; do
+  test -x "${EXE}" || {
+    LOGSEV='err';
+    log_msg "did not find usable executable ${EXE}";
+    ALL_EXE_FOUND=0;
+  }
+done
+test "${ALL_EXE_FOUND}" = '0' && {
+  LOGSEV='crit';
+  log_msg 'did not find all needed executables, aborting';
+  LOGSEV='info';
+  log_msg 'Aborted';
+  exit 1;
+}
+
+# create directory to keep CSV files with MAC address data
+LOGSEV='debug'
+umask 077
+MSG=$(mkdir -pv "${VARDIR}")
+test -n "${MSG}" && log_msg "${MSG}"
+LOGSEV='info'
+log_msg "files will be created in ${VARDIR}"
+
+# read data from LDAP server
+LOGSEV='info'
+MSG="retrieving MAC addresses from LDAP server ${LDAP_URI}"
+MSG="${MSG} into ${LDAPENTRIESRAW}"
+log_msg "${MSG}"
+# clear error messages from last run
+:> "${VARDIR}/${LDAPERRORS}"
+# query LDAP server using ldapsearch
+query_ldap_uri "${LDAP_URI}"
+# error handling: abort this script if ldapsearch reports an error
+RETURNCODE="$?";
+test "${RETURNCODE}" -ne 0 && {
+  LOGSEV='err';
+  log_file "${VARDIR}/${LDAPERRORS}";
+  LOGSEV='err';
+  log_msg "ldapsearch exited with return code ${RETURNCODE}";
+  test -z "${BACKUP_LDAP_URI}" && {
+    LOGSEV='crit';
+    log_msg 'could not query LDAP server, aborting';
+    LOGSEV='info';
+    log_msg 'Aborted';
+    exit 1;
+  };
+  # try backup LDAP server if configured
+  LOGSEV='info';
+  MSG="retrieving MAC addresses from backup LDAP server ${LDAP_URI}";
+  MSG="${MSG} into ${LDAPENTRIESRAW}";
+  log_msg "${MSG}";
+  # clear error messages from last run
+  :> "${VARDIR}/${LDAPERRORS}";
+  query_ldap_uri "${BACKUP_LDAP_URI}";
+  RETURNCODE="$?";
+  test "${RETURNCODE}" -ne 0 && {
+    LOGSEV='err';
+    log_file "${VARDIR}/${LDAPERRORS}";
+    LOGSEV='err';
+    log_msg "ldapsearch exited with return code ${RETURNCODE}";
+    LOGSEV='crit';
+    log_msg 'could not query primary or backup LDAP server, aborting';
+    LOGSEV='info';
+    log_msg 'Aborted';
+    exit 1;
+  };
+}
+# do not continue if LDAP server did not send any records
+test -s "${VARDIR}/${LDAPENTRIESRAW}" || {
+  LOGSEV='err';
+  log_msg 'ldapsearch query did not return any data';
+  LOGSEV='crit';
+  log_msg 'did not receive any data from LDAP server, aborting';
+  LOGSEV='info';
+  log_msg 'Aborted';
+  exit 1;
+}
+
+# re-assemble broken up lines
+LOGSEV='info'
+log_msg "re-assembling broken LDIF lines into ${VARDIR}/${LDAPENTRIES}"
+assemble_lines < "${VARDIR}/${LDAPENTRIESRAW}" > "${VARDIR}/${LDAPENTRIES}"
+
+# rename CSV file from last run to ...previous.csv
+test -f "${VARDIR}/${MACCUR}" && {
+  LOGSEV='info';
+  log_msg "renaming ${MACCUR} to ${MACPREV}";
+  LOGSEV='debug';
+  MSG=$(mv -v "${VARDIR}/${MACCUR}" "${VARDIR}/${MACPREV}" 2>&1)
+  log_msg "${MSG}";
+}
+
+# create CSV file from LDAP data
+LOGSEV='info'
+log_msg "creating CSV file ${MACCUR} from LDAP entries"
+# clear error messages from last run
+:> "${VARDIR}/${CSVERRORS}"
+# use gawk for special treatment of 'print ... > "/dev/stderr"'
+# unset record separator and field separator set to newline
+#   works for record separated by empty lines as returned by
+#   ldapsearch (after broken lines have been reassembled)
+"${GAWK}" -v RS= -F '\n' \
+          -v macldapattr="${LDAP_ATTR_MAC}" \
+          -v esgldapattr="${LDAP_ATTR_ESG}" \
+          -v descldapattr="${LDAP_ATTR_DESC}" \
+ '# for every record, i.e. LDAP entry
+  {
+    # determine end-system group and description
+    esg = ""
+    desc = ""
+    for (i=1; i<=NF; i++) {
+      if ($i ~ esgldapattr) {
+        esg = gensub(/^[^ ]* /, "", 1, $i)
+        # extract end-system group name from LDAP attribute (left-most cn part)
+        sub(/^cn=/, "", esg)
+        sub(/,cn=.*$/, "", esg)
+      } else if ($i ~ descldapattr) {
+        desc = gensub(/^[^ ]* /, "", 1, $i)
+        # replace commas with dots, because CSV format uses commas
+        gsub(/,/, ".", desc)
+      }
+    }
+    # end-system group is mandatory, description optional
+    if (esg == "") {
+      print "ERROR: no end-system group for LDAP entry:\n" $0 > "/dev/stderr"
+      next
+    }
+    # end-system group name must not contain a comma
+    if (esg ~ /,/) {
+      print "ERROR: end-system group contains a comma (" esg ")" > "/dev/stderr"
+      print "ERROR: LDAP entry with wrong ES group name:\n" $0 > "/dev/stderr"
+      next
+    }
+    # add marker to description
+    desc = "## added by sync_macs_from_ldap ## " desc
+    # create one CSV entry for every MAC address of the LDAP entry
+    for (i=1; i<=NF; i++) {
+      if ($i ~ macldapattr) {
+        mac = gensub(/^[^ ]* /, "", 1, $i)
+        # do not use quotes as NRT does not support quoting
+        print mac "," esg "," desc
+      }
+    }
+  }' "${VARDIR}/${LDAPENTRIES}" \
+  2> "${VARDIR}/${CSVERRORS}" | sort > "${VARDIR}/${MACCUR}"
+test -s "${VARDIR}/${CSVERRORS}" && {
+  LOGSEV='err';
+  log_msg 'errors during LDAP to CSV conversion';
+  log_file "${VARDIR}/${CSVERRORS}";
+  LOGSEV='crit';
+  log_msg 'could not convert all LDAP records correctly to CSV, aborting';
+  LOGSEV='info';
+  log_msg 'Aborted';
+  exit 1;
+}
+
+# create differences from previous run
+LOGSEV='info'
+log_msg 'computing differences from previous run'
+if test -f "${VARDIR}/${MACPREV}"; then
+  log_msg "creating diff file ${MACDIFF}"
+  "${DIFF}" -u "${VARDIR}/${MACPREV}" "${VARDIR}/${MACCUR}" \
+    > "${VARDIR}/${MACDIFF}"
+else
+  LOGSEV='notice'
+  log_msg 'no previous CSV file found, all MACs are assumed new'
+  LOGSEV='info'
+  log_msg "creating diff file ${VARDIR}/${MACDIFF}"
+  "${DIFF}" -u '/dev/null' "${VARDIR}/${MACCUR}" > "${VARDIR}/${MACDIFF}"
+fi
+
+# create CSV file with MAC addresses that will be removed
+LOGSEV='info'
+log_msg "creating list of MAC addresses to remove from NAC: ${MACREM}"
+sed -n 's/^-\([^-]\)/\1/p' "${VARDIR}/${MACDIFF}" > "${VARDIR}/${MACREM}"
+
+# create CSV file with MAC addresses that will be added
+LOGSEV='info'
+log_msg "creating list of MAC addresses to add to NAC: ${MACADD}"
+sed -n 's/^+\([^+]\)/\1/p' "${VARDIR}/${MACDIFF}" > "${VARDIR}/${MACADD}"
+
+# log statistics
+L_MACS=$(fgrep -c 'macAddress' "${VARDIR}/${LDAPENTRIES}")
+C_MACS=$(wc -l < "${VARDIR}/${MACCUR}")
+D_MACS=$(wc -l < "${VARDIR}/${MACREM}")
+A_MACS=$(wc -l < "${VARDIR}/${MACADD}")
+LOGSEV='debug'
+log_msg "found ${L_MACS} MACs in LDAP, created ${C_MACS} CSV lines"
+test "${L_MACS}" = "${C_MACS}" || {
+  LOGSEV='err';
+  log_msg 'inconsistent LDAP to CSV conversion';
+  LOGSEV='crit';
+  log_msg 'could not correctly convert LDAP data to CSV, aborting';
+  LOGSEV='info';
+  log_msg 'Aborted';
+  exit 1;
+}
+LOGSEV='info'
+log_msg "${D_MACS} MAC addresses to remove, ${A_MACS} MAC addresses to add"
+
+# remove MAC addresses from EMC / EAC with NRT
+test "${D_MACS}" -gt 0 && {
+  LOGSEV='info';
+  log_msg "removing ${D_MACS} MACs from EMC / EAC using NacRequestTool";
+  cd "${NRTDIR}";
+  "./${NRT}" -server "${EMC_IP}" -username "${NRT_USER}" \
+             -password "${NRT_PASS}" -timeout "${NRTTO}" \
+             ${NRTDEL} "${VARDIR}/${MACREM}" > "${VARDIR}/${NRTDELOUT}";
+  RETURNCODE="$?";
+  LOGSEV='info';
+  log_file "${VARDIR}/${NRTDELOUT}";
+  test "${RETURNCODE}" -ne 0 && {
+    LOGSEV='err';
+    log_msg "NacRequestTool exited with return code ${RETURNCODE}";
+  };
+}
+
+# add MAC addresses to EMC / EAC with NRT
+test "${A_MACS}" -gt 0 && {
+  LOGSEV='info';
+  log_msg "adding ${A_MACS} MACs from EMC / EAC using NacRequestTool";
+  cd "${NRTDIR}";
+  "./${NRT}" -server "${EMC_IP}" -username "${NRT_USER}" \
+             -password "${NRT_PASS}" -timeout "${NRTTO}" \
+             ${NRTADD} "${VARDIR}/${MACADD}" > "${VARDIR}/${NRTADDOUT}";
+  RETURNCODE="$?";
+  LOGSEV='info';
+  log_file "${VARDIR}/${NRTADDOUT}";
+  test "${RETURNCODE}" -ne 0 && {
+    LOGSEV='err';
+    log_msg "NacRequestTool exited with return code ${RETURNCODE}";
+  };
+}
+
+### end of script
+LOGSEV='info'
+log_msg 'Finish'
+
+# vim:filetype=sh:expandtab:shiftwidth=2:

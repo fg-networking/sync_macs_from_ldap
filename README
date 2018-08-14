@@ -1,0 +1,20 @@
+Synchronization from LDAP to Extreme Access Control (sync_macs_from_ldap)
+-------------------------------------------------------------------------
+
+The program "sync_macs_from_ldap" can be used to synchronize MAC
+addresses and end-system group information stored in an LDAP server
+with the data store of Extreme Access Control (EAC) (also known as
+ExtremeControl, formerly known as NAC). It can be invoked via cron to
+regularly synchronize from LDAP to the EAC data store.
+
+Communication with both the LDAP server and the Extreme Management Center
+(XMC) used to configure EAC uses IP connectivity. Thus sync_macs_from_ldap
+can be executed on a system separate from both LDAP and EAC / XMC servers.
+
+The program sync_macs_from_ldap can be installed on GNU/Linux
+systems. Please See the INSTALL file for additional information.
+
+The program sync_macs_from_ldap was developed to work with a Univention
+Corporate Server (UCS) with end-system network information comprising
+MAC addresses and logical network names. LDAP schema and TCP ports used
+in sync_macs_from_ldap reflect the UCS setings.

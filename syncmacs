@@ -1,0 +1,22 @@
+# /etc/cron.d/syncmacs
+# crontab fragment for sync_macs_from_ldap
+#
+# Copyright (C) 2017 by Erik Auerswald <auerswald@fg-networking.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# start MAC synchronization from LDAP to EMC / EAC every 5 minutes
+#
+# m h dom mon dow user command
+*/5 * * * * root test -x /usr/local/bin/sync_macs_from_ldap && /usr/local/bin/sync_macs_from_ldap
