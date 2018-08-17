@@ -1,3 +1,2 @@
-- add lock file to prevent concurrent script runs
 - move user configuration to separate file
 - write a man page
