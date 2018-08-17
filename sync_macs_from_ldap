@@ -2,9 +2,9 @@
 
 # sync_macs_from_ldap - Synchronize NAC end-system groups with LDAP
 #
-# Version 1.0.3
+# Version 1.1.0
 
-# Copyright (C) 2017 by Erik Auerswald <auerswald@fg-networking.de>
+# Copyright (C) 2017-2018 by Erik Auerswald <auerswald@fg-networking.de>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,6 +36,9 @@
 # The LDAP server is queried using "ldapsearch."
 # EMC / EAC is accessed using Extreme Network's NAC Request Tool (NRT).
 # Output is sent to Syslog (additionally to STDERR if started with a TTY).
+#
+# A lock file containing the running script's PID is used to prevent
+# parallel running instances.
 
 # uncomment the following line for debugging
 #tty -s && set -x
@@ -86,6 +89,7 @@ MACADD='LDAP_mac_addresses_add.csv'
 MACREM='LDAP_mac_addresses_remove.csv'
 CSVERRORS='CSV_generation_errors.txt'
 LDAPERRORS='LDAP_search_errors.txt'
+LOCK="${PROG}.lock"
 
 # error out if an unset variable is dereferenced
 set -u
@@ -169,6 +173,20 @@ MSG=$(mkdir -pv "${VARDIR}")
 test -n "${MSG}" && log_msg "${MSG}"
 LOGSEV='info'
 log_msg "files will be created in ${VARDIR}"
+
+# only one instance of this script should be running, thus write the
+# script PID to a lock file unless the file exists already
+test -e "${VARDIR}/${LOCK}" && {
+  LOGSEV='err';
+  log_msg "${PROG} already running (PID $(cat "${VARDIR}/${LOCK}")), aborting";
+  LOGSEV='info';
+  log_msg 'Aborted';
+  exit 1;
+}
+trap "rm -f ${VARDIR}/${LOCK}" 0 1 2 3 5 15
+echo "$$" > "${VARDIR}/${LOCK}"
+LOGSEV='debug'
+log_msg "written PID $$ to log file ${VARDIR}/${LOCK}"
 
 # read data from LDAP server
 LOGSEV='info'
