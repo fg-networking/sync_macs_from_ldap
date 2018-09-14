@@ -18,3 +18,27 @@ The program sync_macs_from_ldap was developed to work with a Univention
 Corporate Server (UCS) with end-system network information comprising
 MAC addresses and logical network names. LDAP schema and TCP ports used
 in sync_macs_from_ldap reflect the UCS setings.
+
+Operation
+---------
+
+The script sync_macs_from_ldap reads MAC addresses, end-system group name,
+and description from an LDAP server and adds / removes MAC addresses
+from / to Extreme Management Center resp. Extreme Access Control
+(formerly known as NAC).
+
+Only MAC Addresses added via this script can be removed by this script.
+
+The end-system groups need to be manually created in EMC / EAC, they are
+not synched via this script.
+
+Note that this script updates the EMC data base. Either a manual "enforce" or
+the end-system group option "Automatically update Extreme Access Control
+engines" is needed to propagate the changes to the EAC engines (NAC servers)
+
+The LDAP server is queried using "ldapsearch."
+EMC / EAC is accessed using Extreme Network's NAC Request Tool (NRT).
+Output is sent to Syslog (additionally to STDERR if started with a TTY).
+
+A lock file containing the running script's PID is used to prevent
+parallel running instances.
