@@ -41,4 +41,5 @@ EMC / EAC is accessed using Extreme Network's NAC Request Tool (NRT).
 Output is sent to Syslog (additionally to STDERR if started with a TTY).
 
 A lock file containing the running script's PID is used to prevent
-parallel running instances.
+parallel running instances. If this file persists although no instance
+of sync_macs_from_ldap is running, it needs to be removed manually.
