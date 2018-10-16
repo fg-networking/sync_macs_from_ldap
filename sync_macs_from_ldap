@@ -59,6 +59,7 @@ LOGGER='/usr/bin/logger'
 LOGOPTS="-t ${PROG}"
 LOGSEV='info'
 VARDIR="/var/lib/${PROG}"
+LOCKDIR='/var/lock'
 LDAPENTRIESRAW='LDAP_entries_raw.ldif'
 LDAPENTRIES='LDAP_entries.ldif'
 MACCUR='LDAP_mac_addresses.csv'
@@ -155,17 +156,17 @@ log_msg "files will be created in ${VARDIR}"
 
 # only one instance of this script should be running, thus write the
 # script PID to a lock file unless the file exists already
-test -e "${VARDIR}/${LOCK}" && {
+test -e "${LOCKDIR}/${LOCK}" && {
   LOGSEV='err';
-  log_msg "${PROG} already running (PID $(cat "${VARDIR}/${LOCK}")), aborting";
+  log_msg "${PROG} already running (PID $(cat "${LOCKDIR}/${LOCK}")), aborting";
   LOGSEV='info';
   log_msg 'Aborted';
   exit 1;
 }
-trap "rm -f ${VARDIR}/${LOCK}" 0 1 2 3 5 15
-echo "$$" > "${VARDIR}/${LOCK}"
+trap "rm -f ${LOCKDIR}/${LOCK}" 0 1 2 3 5 15
+echo "$$" > "${LOCKDIR}/${LOCK}"
 LOGSEV='debug'
-log_msg "written PID $$ to log file ${VARDIR}/${LOCK}"
+log_msg "written PID $$ to log file ${LOCKDIR}/${LOCK}"
 
 # read data from LDAP server
 LOGSEV='info'
