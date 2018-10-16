@@ -35,12 +35,12 @@ LDAP_ATTR_DESC='description'
 EMC_IP='192.0.2.46'
 NRT_USER='EMC_admin'
 NRT_PASS='EMC_pass'
+NRTDIR='/usr/local/Extreme_Networks/NacRequestTool'
 SYSLOG_SERVERS='192.0.2.46:514 192.0.2.49:514'
 SYSLOG_FACILITY='local0'
 
 ## internal configuration section - handle with care
 # external executables and their options
-NRTDIR='/usr/local/Extreme_Networks/NacRequestTool'
 NRT='NacRequest.sh'
 NRTTO='10000'
 NRTADD='-addAndReauth -oper esoverride -endsystem -csv'
