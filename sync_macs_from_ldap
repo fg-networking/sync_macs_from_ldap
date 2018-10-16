@@ -22,22 +22,20 @@
 # uncomment the following line for debugging
 #tty -s && set -x
 
-## user configuration section
-LDAP_URI='ldap://192.0.2.47:7389'
-BACKUP_LDAP_URI='ldap://192.0.2.48:7389'
-LDAP_BIND_USER='uid=username,cn=users,dc=example,dc=com'
-LDAP_PASS='LDAP_pass'
-LDAP_BASE='cn=computers,dc=example,dc=com'
-LDAP_FILTER='(&(macAddress=*)(univentionNetworkLink=*))'
-LDAP_ATTR_MAC='macAddress'
-LDAP_ATTR_ESG='univentionNetworkLink'
-LDAP_ATTR_DESC='description'
-EMC_IP='192.0.2.46'
-NRT_USER='EMC_admin'
-NRT_PASS='EMC_pass'
-NRTDIR='/usr/local/Extreme_Networks/NacRequestTool'
-SYSLOG_SERVERS='192.0.2.46:514 192.0.2.49:514'
-SYSLOG_FACILITY='local0'
+## user configuration section sourced from file
+CONFIG_FILE='sync_macs_from_ldap.conf'
+SCRIPT_DIR="$(dirname $(realpath $0))"
+if test -f "/usr/local/etc/${CONFIG_FILE}"; then
+  CONFIG_FILE="/usr/local/etc/${CONFIG_FILE}"
+elif test -f "/etc/${CONFIG_FILE}"; then
+  CONFIG_FILE="/etc/${CONFIG_FILE}"
+elif test -f "${SCRIPT_DIR}/${CONFIG_FILE}"; then
+  CONFIG_FILE="${SCRIPT_DIR}/${CONFIG_FILE}"
+else
+  echo 'ERROR: no configuration file found, aborting'
+  exit 1
+fi
+source "${CONFIG_FILE}"
 
 ## internal configuration section - handle with care
 # external executables and their options
@@ -125,6 +123,8 @@ assemble_lines() {
 ### beginning of main functionality
 LOGSEV='info'
 log_msg 'Start'
+log_msg "using configuration file ${CONFIG_FILE}"
+log_msg "script installed in directory ${SCRIPT_DIR}"
 
 # check for needed executables
 ALL_EXE_FOUND=1

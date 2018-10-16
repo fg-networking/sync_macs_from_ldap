@@ -24,10 +24,12 @@ Installing "sync_macs_from_ldap" requires five steps:
 
     install -m 750 -o root -g staff sync_macs_from_ldap /usr/local/bin/
 
-4. Edit the installed "sync_macs_from_ldap" script section accoring to your
-   needs (LDAP, XMC, and Syslog server settings). If NRT is not installed
-   in the directory /usr/local/Extreme_Networks/NacRequestTool/ you need
-   to adjust the script settings to your NRT installation.
+4. Edit the example configuration "sync_macs_from_ldap.conf.example"
+   according to your needs (LDAP, XMC, and Syslog server settings)
+   and copy it as "sync_macs_from_ldap.conf" to /usr/local/etc/ with
+   correct owner and access rights:
+
+    install -m 640 -o root -g staff sync_macs_from_ldap.conf.example /usr/local/bin/sync_macs_from_ldap.conf
 
 5. Configure cron to regularly execute sync_macs_from_ldap. At least on
    Debian GNU/Linux and derived distributions like Ubuntu that can be
@@ -35,3 +37,6 @@ Installing "sync_macs_from_ldap" requires five steps:
    correct owner and access rights:
 
     install -m 644 -o root -g staff syncmacs /etc/cron.d/
+
+If your system does not use the "staff" group for /usr/local you can
+use the group "root" instead of "staff".

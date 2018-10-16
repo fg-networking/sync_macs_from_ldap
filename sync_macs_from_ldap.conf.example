@@ -1,0 +1,21 @@
+# Example configuration file for sync_macs_from_ldap.
+#
+# Adjust settings below to match installation,
+# then install file with name sync_macs_from_ldap.conf
+# to /usr/local/etc or /etc directory.
+
+LDAP_URI='ldap://192.0.2.47:7389'
+BACKUP_LDAP_URI='ldap://192.0.2.48:7389'
+LDAP_BIND_USER='uid=username,cn=users,dc=example,dc=com'
+LDAP_PASS='LDAP_pass'
+LDAP_BASE='cn=computers,dc=example,dc=com'
+LDAP_FILTER='(&(macAddress=*)(univentionNetworkLink=*))'
+LDAP_ATTR_MAC='macAddress'
+LDAP_ATTR_ESG='univentionNetworkLink'
+LDAP_ATTR_DESC='description'
+EMC_IP='192.0.2.46'
+NRT_USER='EMC_admin'
+NRT_PASS='EMC_pass'
+NRTDIR='/usr/local/Extreme_Networks/NacRequestTool'
+SYSLOG_SERVERS='192.0.2.46:514 192.0.2.49:514'
+SYSLOG_FACILITY='local0'
