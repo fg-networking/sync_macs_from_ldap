@@ -29,7 +29,7 @@ Installing "sync_macs_from_ldap" requires five steps:
    and copy it as "sync_macs_from_ldap.conf" to /usr/local/etc/ with
    correct owner and access rights:
 
-    install -m 640 -o root -g staff sync_macs_from_ldap.conf.example /usr/local/bin/sync_macs_from_ldap.conf
+    install -m 640 -o root -g staff sync_macs_from_ldap.conf.example /usr/local/etc/sync_macs_from_ldap.conf
 
 5. Configure cron to regularly execute sync_macs_from_ldap. At least on
    Debian GNU/Linux and derived distributions like Ubuntu that can be
