@@ -1,2 +1,6 @@
+* version 1.1.1
+  * address potential problems detected using 'shellcheck'
+* version 1.1.0
+  * add lock file to prevent running more than one instance
 * version 1.0.3
   * first public release
