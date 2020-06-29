@@ -1,0 +1,65 @@
+.TH SYNC_MACS_FROM_LDAP 1 2020-06-29 "fgn GmbH" "ExtremeControl Integration"
+.SH NAME
+sync_macs_from_ldap \- synchronize end-system data from LDAP to ExtremeControl
+.SH SYNOPSIS
+.B sync_macs_from_ldap
+.SH DESCRIPTION
+Synchronize end-system data, i.e., MAC addresses, from an LDAP server to
+.BR ExtremeControl .
+End-system groups specified in LDAP need to exist in ExtremeControl.
+Invoke
+.B sync_macs_from_ldap
+via
+.BR cron(8)
+for regular synchronization.
+.B sync_macs_from_ldap
+writes log messages to the system log.
+If
+.B sync_macs_from_ldap
+is started from an interactive session inside a terminal,
+log messages are sent to standard error as well.
+.SH EXIT STATUS
+.TP
+0
+if OK,
+.TP
+1
+if an error occurred.
+.SH FILES
+.TP
+.B /usr/local/etc/sync_macs_from_ldap.conf
+Default location of configuration file.
+.TP
+.B /etc/cron.d/syncmacs
+Default location of crontab file fragment for regular synchronization.
+.TP
+.B /var/lib/sync_macs_from_ldap/
+Default directory for state data.
+.TP
+.B /var/lock/sync_macs_from_ldap.lock
+Default location of lock file.
+.TP
+.B /usr/local/Extreme_Networks/NacRequestTool/NacRequest.sh
+Default location of Extreme Network's
+.B NAC Request Tool
+(NRT).
+.SH AUTHOR
+Written by Erik Auerswald.
+.SH COPYRIGHT
+Copyright \(co 2017-2020 Erik Auerswald.
+License GPLv3+: GNU GPL version 3 or later
+.UR https://gnu.org/licenses/gpl.html
+.UE .
+.br
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+.SH SEE ALSO
+.Br cron (8),
+.BR crontab (1),
+.BR crontab (5),
+.BR ldapsearch (1),
+.BR logger (1)
+.br
+.UR https://www.fg-networking.de
+fgn \- fundamental generic networking
+.UE

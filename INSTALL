@@ -24,14 +24,19 @@ Installing "sync_macs_from_ldap" requires five steps:
 
     install -m 750 -o root -g staff sync_macs_from_ldap /usr/local/bin/
 
-4. Edit the example configuration "sync_macs_from_ldap.conf.example"
+4. Copy the manual page "sync_macs_from_ldap.1" to /usr/local/man/ with correct
+   owner and access rights as well as the appropriate extension ".l":
+
+    install -m 644 -o root -g staff sync_macs_from_ldap.1 /usr/local/bin/sync_macs_from_ldap.l
+
+5. Edit the example configuration "sync_macs_from_ldap.conf.example"
    according to your needs (LDAP, XMC, and Syslog server settings)
    and copy it as "sync_macs_from_ldap.conf" to /usr/local/etc/ with
    correct owner and access rights:
 
     install -m 640 -o root -g staff sync_macs_from_ldap.conf.example /usr/local/etc/sync_macs_from_ldap.conf
 
-5. Configure cron to regularly execute sync_macs_from_ldap. At least on
+6. Configure cron to regularly execute sync_macs_from_ldap. At least on
    Debian GNU/Linux and derived distributions like Ubuntu that can be
    done by copying the crontab fragment "syncmacs" to /etc/cron.d/ with
    correct owner and access rights:
